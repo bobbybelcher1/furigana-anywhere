@@ -24,12 +24,13 @@ Full details in the changelog below.
 **No Japanese subtitles on the site? No problem.** Some services (Crunchyroll, for example) do not offer a Japanese subtitle track at all. Download a Japanese `.srt` for the episode (kitsunekko.net and jimaku.cc are the usual sources for anime) and load it with the **Load sub** button in the toolbar popup. The whole study layer works exactly the same.
 
 ## Screenshots
-new screenshots coming soon
 
 ![Furigana overlay on a video](screenshots/overlay.jpg)
 ![Tap any word for its reading, meaning, romaji, and pitch accent](screenshots/word-card.jpg)
 ![Sentence miner: one click turns a line into an Anki flashcard](screenshots/miner.jpg)
-![Searchable transcript panel](screenshots/transcript.jpg)
+![Episode tab: unknown words ranked by frequency](screenshots/transcript.jpg)
+![Saved words with context](screenshots/saved.jpg)
+![Toolbar popup with themes and study modes](screenshots/popup.jpg)
 
 ## Install (Chrome, Edge, Brave, Arc)
 
