@@ -40,12 +40,37 @@ chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     // Covered by the existing activeTab + <all_urls> host permissions;
     // no new permissions needed.
     try {
-      chrome.tabs.captureVisibleTab(null, { format: "jpeg", quality: 70 }, function (dataUrl) {
+      var winId = (sender && sender.tab && typeof sender.tab.windowId === "number") ? sender.tab.windowId : null;
+      chrome.tabs.captureVisibleTab(winId, { format: "jpeg", quality: 75 }, function (dataUrl) {
         if (chrome.runtime.lastError) sendResponse({ ok: false, error: String(chrome.runtime.lastError.message || chrome.runtime.lastError) });
         else sendResponse({ ok: !!dataUrl, dataUrl: dataUrl || "" });
       });
     } catch (e) { sendResponse({ ok: false, error: String(e && e.message || e) }); }
     return true; // async sendResponse
+  }
+  if (msg && msg.type === "SP_JIMAKU_SEARCH") {
+    var query = encodeURIComponent(String(msg.query || "").trim());
+    var apiKey = String(msg.apiKey || "").trim();
+    var headers = apiKey ? { "Authorization": apiKey } : {};
+    fetch("https://jimaku.cc/api/entries/search?anime=true&query=" + query, { headers: headers })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status + (r.status === 401 ? " (Add your free Jimaku.cc API key in Popup Settings)" : ""));
+        return r.json();
+      })
+      .then(function (entries) {
+        if (!Array.isArray(entries) || !entries.length) {
+          sendResponse({ ok: true, entry: null, files: [] });
+          return null;
+        }
+        var topEntry = entries[0];
+        return fetch("https://jimaku.cc/api/entries/" + encodeURIComponent(topEntry.id) + "/files", { headers: headers })
+          .then(function (r2) { return r2.ok ? r2.json() : []; })
+          .then(function (files) {
+            sendResponse({ ok: true, entry: topEntry, files: Array.isArray(files) ? files : [] });
+          });
+      })
+      .catch(function (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); });
+    return true;
   }
   if (!msg || msg.type !== "SP_FETCH_TEXT" || !msg.url) return false;
   var url = String(msg.url);

@@ -11,7 +11,7 @@
     <div class="logo" aria-hidden="true">&#12354;</div>
     <div>
       <h1>Study Player</h1>
-      <p>Furigana study layer for almost any web video. Open a video, press play, and load its Japanese subtitles.</p>
+      <p>Furigana, grammar &amp; mining suite for any web video. Open a video, press play, and load Japanese subtitles.</p>
     </div>
   </header>
 
@@ -19,16 +19,58 @@
 
   <div class="toggles">
     <label class="row">
-      <span><strong> Study overlay</strong><small>Show furigana captions over the video</small></span>
+      <span><strong>Visual theme</strong><small>Applies to popup, cards, and panels</small></span>
+      <select id="theme" class="select-sm">
+        <option value="classic-light">Paper Light</option>
+        <option value="dark-slate">Midnight Slate</option>
+        <option value="sakura-night">Sakura Night</option>
+        <option value="matcha-zen">Matcha Zen</option>
+        <option value="cyber-neon">Tokyo Neon</option>
+      </select>
+    </label>
+    <label class="row">
+      <span><strong>Study overlay</strong><small>Show furigana captions over the video</small></span>
       <input type="checkbox" id="enabled">
     </label>
     <label class="row">
-      <span><strong>Furigana</strong><small>Readings over kanji</small></span>
+      <span><strong>Furigana</strong><small>Readings over kanji (Shift+F)</small></span>
       <input type="checkbox" id="furigana">
     </label>
     <label class="row">
-      <span><strong>English line</strong><small>From the video's EN subtitle track, if it has one</small></span>
+      <span><strong>Furigana mode</strong><small>All words, unknown only, or hover</small></span>
+      <select id="furiganaMode" class="select-sm">
+        <option value="all">All words</option>
+        <option value="unknown">Unknown only</option>
+        <option value="hover">Hover only</option>
+      </select>
+    </label>
+    <label class="row">
+      <span><strong>Listening / Cloze mode</strong><small>Blur line or blank unknown words</small></span>
+      <select id="listeningMode" class="select-sm">
+        <option value="normal">Normal visible</option>
+        <option value="blur">Blur until hover</option>
+        <option value="cloze-unknown">Cloze unknown</option>
+      </select>
+    </label>
+    <label class="row">
+      <span><strong>English line</strong><small>From the video's EN subtitle track (Shift+E)</small></span>
       <input type="checkbox" id="translation">
+    </label>
+    <label class="row">
+      <span><strong>Group verb conjugations</strong><small>Merge verbs + auxiliary chains (~ている, ~られた)</small></span>
+      <input type="checkbox" id="groupVerbs">
+    </label>
+    <label class="row">
+      <span><strong>Pitch accent colors</strong><small>Color-code words by pitch pattern</small></span>
+      <input type="checkbox" id="pitchColors">
+    </label>
+    <label class="row">
+      <span><strong>Auto-pause line</strong><small>Pause at the end of each subtitle line (P)</small></span>
+      <input type="checkbox" id="autoPause">
+    </label>
+    <label class="row">
+      <span><strong>Pause on caption hover</strong><small>Pause while mouse is over subtitles</small></span>
+      <input type="checkbox" id="hoverPause">
     </label>
   </div>
 
@@ -40,45 +82,78 @@
   <div class="actions">
     <button class="btn" id="mineBtn" type="button" title="Mine the current subtitle line into a flashcard">Mine line</button>
     <button class="btn" id="loadSubBtn" type="button" title="Load a local .srt, .vtt or .ass file">Load sub</button>
-    <button class="btn" id="subsBtn" type="button" title="Pick a subtitle file the extension found on the page">Subs</button>
+    <button class="btn" id="subsBtn" type="button" title="Pick a subtitle file, search Jimaku, or start Live ASR">Subs &amp; ASR</button>
   </div>
 
   <p class="meta" id="vocabMeta">Saved words load from the video page.</p>
 
   <section class="settings">
     <h2>Anki export</h2>
-    <label class="field"><span>Deck name</span><input id="ankiDeck" type="text" placeholder="Default" autocomplete="off"></label>
-    <label class="field"><span>Note type</span><input id="ankiModel" type="text" placeholder="Basic" autocomplete="off"></label>
+    <label class="row" style="margin-bottom:8px">
+      <span><strong>Include video screenshot</strong><small>Attach a frame screenshot to mined Anki cards</small></span>
+      <input type="checkbox" id="ankiIncludeShot" checked>
+    </label>
+    <label class="field"><span>Deck name</span><input id="ankiDeck" list="ankiDeckList" type="text" placeholder="Default" autocomplete="off"></label>
+    <datalist id="ankiDeckList"></datalist>
+    <label class="field"><span>Note type</span><input id="ankiModel" list="ankiModelList" type="text" placeholder="Basic" autocomplete="off"></label>
+    <datalist id="ankiModelList"></datalist>
     <label class="field"><span>Tags</span><input id="ankiTags" type="text" placeholder="furigana-anywhere" autocomplete="off"></label>
+    <details class="field-map">
+      <summary>Custom field mapping (optional)</summary>
+      <label class="field"><span>Sentence field</span><input id="ankiSentField" list="ankiFieldList" type="text" placeholder="Auto (Front / Sentence / Expression)" autocomplete="off"></label>
+      <label class="field"><span>Back / Glossary field</span><input id="ankiMeanField" list="ankiFieldList" type="text" placeholder="Auto (Back / Glossary / Meaning)" autocomplete="off"></label>
+      <label class="field"><span>Reading field</span><input id="ankiReadField" list="ankiFieldList" type="text" placeholder="Auto (Reading / Furigana)" autocomplete="off"></label>
+      <label class="field"><span>Screenshot field</span><input id="ankiPicField" list="ankiFieldList" type="text" placeholder="Auto (Picture / Image / Back)" autocomplete="off"></label>
+      <label class="field"><span>Audio field</span><input id="ankiAudioField" list="ankiFieldList" type="text" placeholder="Auto (Audio / SentenceAudio / Back)" autocomplete="off"></label>
+      <datalist id="ankiFieldList"></datalist>
+    </details>
     <div class="actions">
       <button class="btn primary" id="ankiSave" type="button">Save Anki settings</button>
-      <button class="btn" id="ankiTest" type="button">Test connection</button>
+      <button class="btn" id="ankiTest" type="button">Test &amp; load decks</button>
     </div>
-    <p class="meta" id="ankiMeta">Mined cards go to this deck and note type. Note type must have Front, Back, and (for screenshots) a picture field.</p>
+    <p class="meta" id="ankiMeta">Mined cards go to this deck and note type. Leave field mapping blank to auto-match Front/Back or Lapis/Mining fields.</p>
   </section>
 
   <section class="settings">
-    <h2>Known words</h2>
-    <p class="meta" id="knownMeta">Words you mark as known fade in the captions so new words stand out.</p>
+    <h2>Known words &amp; i+1</h2>
+    <p class="meta" id="knownMeta">Words you mark as known fade in captions and power i+1 sentence badges.</p>
     <div class="actions">
       <button class="btn bulkBtn" data-bulk="N5" type="button" title="Mark every N5 word as known">I know N5</button>
       <button class="btn bulkBtn" data-bulk="N4" type="button" title="Mark every N5 and N4 word as known">I know N4</button>
       <button class="btn bulkBtn" data-bulk="N3" type="button" title="Mark every N5, N4 and N3 word as known">I know N3</button>
     </div>
     <div class="actions">
-      <button class="btn" id="knownClear" type="button">Clear all known words</button>
+      <button class="btn primary" id="knownSyncAnki" type="button" title="Import known vocabulary from your existing Anki collection">Sync from Anki</button>
+      <button class="btn" id="knownClear" type="button">Clear known</button>
     </div>
+  </section>
+
+  <section class="settings">
+    <h2>Jimaku.cc Subtitle Search</h2>
+    <label class="field"><span>Jimaku.cc API Key (optional, for anime sub search)</span><input id="jimakuKey" type="password" placeholder="Optional API token from jimaku.cc" autocomplete="off"></label>
+    <div class="actions">
+      <button class="btn primary" id="jimakuSave" type="button">Save Jimaku key</button>
+    </div>
+    <p class="meta" id="jimakuMeta">Used when searching anime subtitles directly inside the on-video <strong>Subs &amp; ASR</strong> menu.</p>
+  </section>
+
+  <section class="settings">
+    <h2>Caption style</h2>
+    <label class="field"><span>Text size <b class="val" id="capSizeVal">26px</b></span><input id="capSize" type="range" min="14" max="44" step="1" value="26"></label>
+    <label class="field"><span>Background <b class="val" id="capBgVal">72%</b></span><input id="capBg" type="range" min="0" max="100" step="2" value="72"></label>
+    <label class="field"><span>Known words fade <b class="val" id="capKnownVal">45%</b></span><input id="capKnown" type="range" min="10" max="100" step="5" value="45"></label>
+    <div class="field"><span>Text color</span><div class="swatches" id="capTextSw"></div></div>
+    <div class="field"><span>Word highlight</span><div class="swatches" id="capHoverSw"></div></div>
   </section>
 
   <section class="how">
     <h2>How it works</h2>
     <ol>
       <li>Open any site with a video player and press play.</li>
-      <li>If the player has Japanese captions, turn them on. Otherwise use <strong>Load sub</strong> above to add an .srt/.vtt file, or open <strong>Subs</strong> to pick a subtitle file the extension found on the page.</li>
-      <li>The study captions appear over the video. Tap any word to look it up.</li>
-      <li>Use <strong>Mine line</strong> above to turn the current line into a flashcard. Use Replay, Loop, and 0.5x-0.75x speed on the video to shadow a line.</li>
+      <li>Turn on Japanese captions, use <strong>Load sub</strong> (.srt/.vtt/.ass), or open <strong>Subs &amp; ASR</strong> to search Jimaku, auto-sync timing, or run Live ASR.</li>
+      <li>Tap any word for definitions, pitch accent diagrams, grammar breakdowns, and kanji lookalikes. Drag the caption box handle (&#8942;&#8942;) to reposition it.</li>
+      <li>Use <strong>Mine line</strong> to capture screenshots, real show audio, pitch accent, and send to Anki, or practice speaking with <strong>Shadow (Mic)</strong>.</li>
     </ol>
-    <p class="note">Works on YouTube plus most HTML5 players (Video.js, Plyr, JW Player and plain &lt;video&gt; sites). Subtitles burned into the picture and DRM-locked players cannot be read; for those, download the .srt separately and use Load sub. Everything runs locally; nothing is uploaded.</p>
   </section>
 
   <script src="popup.js"></script>

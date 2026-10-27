@@ -21,19 +21,59 @@
   "use strict";
   if (window.__spBridge) return;
   window.__spBridge = true;
-  var lastVideoId = "", unavailableVideoId = "", ytSentFor = "";
+  var lastVideoId = "", unavailableVideoId = "", ytSentFor = "", currentBufferVid = "";
   var sentSubUrls = {}, sentSubTexts = {}, forcedLangs = {};
+  var bufferedUrls = [], bufferedTexts = [];
+  var lastPot = "", lastTimedTextUrl = "";
 
   function isYouTube() { return /(^|\.)youtube\.com$/.test(location.hostname); }
   function getVideoId() {
-    try { return new URL(location.href).searchParams.get("v") || ""; }
-    catch (e) { return ""; }
+    try {
+      var u = new URL(location.href);
+      var v = u.searchParams.get("v");
+      if (v) return v;
+      var m = u.pathname.match(/\/(?:shorts|embed|live)\/([^/?#]+)/);
+      return m ? m[1] : "";
+    } catch (e) { return ""; }
+  }
+  function checkVideoChanged() {
+    var vid = getVideoId();
+    if (vid && currentBufferVid && vid !== currentBufferVid) {
+      sentSubUrls = {};
+      sentSubTexts = {};
+      bufferedUrls = [];
+      bufferedTexts = [];
+      forcedLangs = {};
+      lastPot = "";
+      lastTimedTextUrl = "";
+      ytSentFor = "";
+      unavailableVideoId = "";
+    }
+    if (vid) currentBufferVid = vid;
+  }
+  function harvestPot(url) {
+    if (!url || !isYouTube()) return;
+    var m = String(url).match(/[?&]pot=([^&#]+)/);
+    var isTimed = /\/api\/timedtext/i.test(url);
+    var changed = false;
+    if (m && m[1] && m[1] !== lastPot) {
+      lastPot = decodeURIComponent(m[1]);
+      changed = true;
+    }
+    if (isTimed && url !== lastTimedTextUrl) {
+      lastTimedTextUrl = url;
+      changed = true;
+    }
+    if (changed && (lastPot || lastTimedTextUrl)) {
+      window.postMessage({ type: "SP_YT_POT", videoId: getVideoId(), pot: lastPot, sampleUrl: lastTimedTextUrl }, "*");
+    }
   }
 
   /* ---------- generic subtitle discovery ---------- */
   var SUB_EXT = /\.(vtt|srt|ass|ssa|ttml|xml)([?#]|$)/i;
   function looksSubtitleUrl(url, ctype) {
     if (!url) return false;
+    if (/googlevideo\.com\/videoplayback/i.test(url)) return false;
     if (SUB_EXT.test(url)) return true;
     if (/\.m3u8([?#]|$)/i.test(url)) return true;
     if (/timedtext/i.test(url)) return true;
@@ -57,28 +97,39 @@
     return false;
   }
   function emitUrl(url) {
+    checkVideoChanged();
+    harvestPot(url);
     if (!url || sentSubUrls[url]) return;
     sentSubUrls[url] = 1;
+    if (bufferedUrls.length < 40) bufferedUrls.push(url);
     window.postMessage({ type: "SP_GENERIC_SUB_URL", url: url }, "*");
   }
   function emitText(url, text) {
+    checkVideoChanged();
+    harvestPot(url);
     if (!looksCaptionBody(text)) return;
     var key = (url || location.href) + "|" + text.length;
     if (sentSubTexts[key]) return;
     sentSubTexts[key] = 1;
-    if (text.length < 2500000) window.postMessage({ type: "SP_GENERIC_SUB_TEXT", url: url || location.href, text: text }, "*");
-    else if (url) emitUrl(url);
+    if (text.length < 2500000) {
+      if (bufferedTexts.length < 16) bufferedTexts.push({ url: url || location.href, text: text });
+      window.postMessage({ type: "SP_GENERIC_SUB_TEXT", url: url || location.href, text: text }, "*");
+    } else if (url) {
+      emitUrl(url);
+    }
   }
   function noteResource(url, ctype) {
     if (!url) return;
     var full = url;
     try { full = new URL(url, location.href).href; } catch (e) {}
+    harvestPot(full);
     if (looksSubtitleUrl(full, ctype || "")) emitUrl(full);
   }
-  function scanPageForSubUrls() {
+  function scanPageForSubUrls(includeHtml) {
     try {
       document.querySelectorAll("track[src]").forEach(function (t) { noteResource(t.src, ""); });
       document.querySelectorAll("a[href]").forEach(function (a) { if (SUB_EXT.test(a.href) || /timedtext/i.test(a.href)) noteResource(a.href, ""); });
+      if (!includeHtml) return;
       var html = document.documentElement ? document.documentElement.innerHTML : "";
       var re = /https?:\/\/[^\s"'<>\\]+?\.(?:vtt|srt|ass|ttml)(?:\?[^\s"'<>\\]*)?/gi, m;
       while ((m = re.exec(html))) noteResource(m[0], "");
@@ -105,10 +156,11 @@
     if (origFetch) {
       window.fetch = function () {
         var args = arguments, url = "";
-        try { url = typeof args[0] === "string" ? args[0] : (args[0] && args[0].url) || ""; } catch (e) {}
+        try { url = typeof args[0] === "string" ? args[0] : (args[0] && (args[0].url || args[0].href)) || ""; } catch (e) {}
         return origFetch.apply(this, args).then(function (resp) {
           try {
             var full = new URL(url, location.href).href;
+            harvestPot(full);
             var ctype = resp.headers && resp.headers.get ? resp.headers.get("content-type") || "" : "";
             var interesting = looksSubtitleUrl(full, ctype);
             var isTimed = /timedtext/i.test(full);
@@ -126,12 +178,13 @@
   } catch (e) {}
   try {
     var origOpen = XMLHttpRequest.prototype.open, origSend = XMLHttpRequest.prototype.send;
-    XMLHttpRequest.prototype.open = function (method, url) { this.__spUrl = url; return origOpen.apply(this, arguments); };
+    XMLHttpRequest.prototype.open = function (method, url) { this.__spUrl = url ? String(url) : ""; return origOpen.apply(this, arguments); };
     XMLHttpRequest.prototype.send = function () {
       var xhr = this;
       this.addEventListener("load", function () {
         try {
           var url = new URL(xhr.__spUrl || "", location.href).href;
+          harvestPot(url);
           var ctype = xhr.getResponseHeader ? xhr.getResponseHeader("content-type") || "" : "";
           if (typeof xhr.responseText === "string" && xhr.responseText) {
             if (looksSubtitleUrl(url, ctype) || looksCaptionBody(xhr.responseText)) { emitUrl(url); emitText(url, xhr.responseText); }
@@ -158,15 +211,22 @@
       };
     }).filter(function (t) { return t.baseUrl && t.languageCode; });
   }
-  function tracksFromResponse(resp) {
+  function tracksFromResponse(resp, expectedVid) {
     resp = coerceResponse(resp);
-    if (!resp || !resp.captions || !resp.captions.playerCaptionsTracklistRenderer) return null;
+    if (!resp) return null;
+    var respVid = resp.videoDetails && resp.videoDetails.videoId;
+    if (expectedVid && respVid && respVid !== expectedVid) return null;
+    if (!resp.captions || !resp.captions.playerCaptionsTracklistRenderer) return null;
     var t = normaliseTracks(resp.captions.playerCaptionsTracklistRenderer.captionTracks);
     return t.length ? t : null;
   }
-  function tracksFromHtml() {
+  function tracksFromHtml(expectedVid) {
     try {
       var html = document.documentElement.innerHTML;
+      if (expectedVid) {
+        var vm = html.match(/"videoDetails"\s*:\s*\{[^}]*"videoId"\s*:\s*"([^"]+)"/);
+        if (vm && vm[1] && vm[1] !== expectedVid) return null;
+      }
       var idx = html.indexOf('"captionTracks"');
       if (idx === -1) return null;
       var slice = html.slice(idx, idx + 20000);
@@ -198,14 +258,15 @@
     } catch (e) {}
     return out;
   }
-  function readTracks() {
+  function readTracks(expectedVid) {
     var resps = candidateResponses();
-    for (var i = 0; i < resps.length; i++) { var t = tracksFromResponse(resps[i]); if (t) return t; }
-    return tracksFromHtml();
+    for (var i = 0; i < resps.length; i++) { var t = tracksFromResponse(resps[i], expectedVid); if (t) return t; }
+    return tracksFromHtml(expectedVid);
   }
   function sendYT() {
     var vid = getVideoId(); if (!vid) return false;
-    var tracks = readTracks(); if (!tracks) return false;
+    checkVideoChanged();
+    var tracks = readTracks(vid); if (!tracks) return false;
     window.postMessage({ type: "SP_CAPTION_TRACKS", videoId: vid, tracks: tracks }, "*");
     lastVideoId = vid; ytSentFor = vid; unavailableVideoId = "";
     return true;
@@ -220,44 +281,97 @@
     if (attempt < 30) setTimeout(function () { sendWhenReady(attempt + 1); }, 500);
     else if (isYouTube()) sendUnavailable();
   }
-  function forceYouTubeCC(lang) {
-    if (!isYouTube() || forcedLangs[lang]) return;
+  function replayBufferedToContent() {
+    checkVideoChanged();
+    if (lastPot || lastTimedTextUrl) {
+      window.postMessage({ type: "SP_YT_POT", videoId: getVideoId(), pot: lastPot, sampleUrl: lastTimedTextUrl }, "*");
+    }
+    bufferedUrls.forEach(function (u) {
+      window.postMessage({ type: "SP_GENERIC_SUB_URL", url: u }, "*");
+    });
+    bufferedTexts.forEach(function (item) {
+      window.postMessage({ type: "SP_GENERIC_SUB_TEXT", url: item.url, text: item.text }, "*");
+    });
+  }
+  function activatePlayerTrack(langCode) {
     try {
       var player = document.querySelector("#movie_player");
-      if (!player) return;
-      forcedLangs[lang] = 1;
+      if (!player || !langCode) return;
       try { if (typeof player.loadModule === "function") player.loadModule("captions"); } catch (e) {}
-      try { if (typeof player.setOption === "function") player.setOption("captions", "track", { languageCode: lang }); } catch (e) {}
+      try {
+        if (typeof player.isSubtitlesOn === "function" && !player.isSubtitlesOn() && typeof player.toggleSubtitlesOn === "function") {
+          player.toggleSubtitlesOn();
+        } else if (typeof player.toggleSubtitles === "function" && player.getOption && !player.getOption("captions", "track")) {
+          player.toggleSubtitles();
+        }
+      } catch (e) {}
+      var trackObj = { languageCode: langCode };
+      try {
+        var list = typeof player.getOption === "function" ? player.getOption("captions", "tracklist") : null;
+        if (Array.isArray(list) && list.length) {
+          var exact = list.filter(function (t) { return t.languageCode === langCode; })[0];
+          var prefix = list.filter(function (t) { return t.languageCode && t.languageCode.indexOf(langCode) === 0; })[0];
+          if (exact || prefix) trackObj = exact || prefix;
+        }
+      } catch (e) {}
+      try { if (typeof player.setOption === "function") player.setOption("captions", "track", trackObj); } catch (e) {}
       try { if (typeof player.setOption === "function") player.setOption("captions", "reload", true); } catch (e) {}
-      setTimeout(function () { forcedLangs[lang] = 0; }, 20000);
     } catch (e) {}
+  }
+  function forceYouTubeCC(lang, enLang) {
+    if (!isYouTube()) return;
+    var key = (lang || "ja") + "|" + (enLang || "");
+    if (forcedLangs[key]) return;
+    forcedLangs[key] = 1;
+    activatePlayerTrack(lang || "ja");
+    setTimeout(function () { activatePlayerTrack(lang || "ja"); }, 450);
+    setTimeout(function () { activatePlayerTrack(lang || "ja"); }, 1100);
+    if (enLang && enLang !== lang) {
+      setTimeout(function () { activatePlayerTrack(enLang); }, 1800);
+      setTimeout(function () { activatePlayerTrack(lang || "ja"); }, 2600);
+    }
+    setTimeout(function () { forcedLangs[key] = 0; }, 12000);
   }
   window.addEventListener("message", function (ev) {
     if (ev.source !== window || !ev.data) return;
-    if (ev.data.type === "SP_FORCE_YT_CC") forceYouTubeCC(ev.data.lang || "ja");
-    if (ev.data.type === "SP_REQUEST_TRACKS") sendWhenReady(0);
+    if (ev.data.type === "SP_FORCE_YT_CC") forceYouTubeCC(ev.data.lang || "ja", ev.data.enLang || "");
+    if (ev.data.type === "SP_REQUEST_TRACKS") {
+      ytSentFor = "";
+      scanPerformance();
+      scanPageForSubUrls(true);
+      replayBufferedToContent();
+      sendWhenReady(0);
+    }
   });
 
   if (isYouTube()) {
     document.addEventListener("yt-navigate-finish", function () {
-      lastVideoId = ""; ytSentFor = ""; unavailableVideoId = ""; forcedLangs = {}; sentSubTexts = {};
-      setTimeout(function () { sendWhenReady(0); scanPerformance(); scanPageForSubUrls(); }, 350);
+      checkVideoChanged();
+      ytSentFor = "";
+      setTimeout(function () { sendWhenReady(0); scanPerformance(); scanPageForSubUrls(true); replayBufferedToContent(); }, 250);
     });
-    window.addEventListener("yt-page-data-updated", function () { setTimeout(function () { sendWhenReady(0); }, 350); });
+    window.addEventListener("yt-page-data-updated", function () {
+      checkVideoChanged();
+      setTimeout(function () { sendWhenReady(0); }, 250);
+    });
   }
   var lastHref = location.href;
   setInterval(function () {
     if (location.href !== lastHref) {
-      lastHref = location.href; lastVideoId = ""; ytSentFor = ""; unavailableVideoId = "";
-      setTimeout(function () { sendWhenReady(0); scanPerformance(); }, 350);
+      lastHref = location.href;
+      checkVideoChanged();
+      ytSentFor = "";
+      setTimeout(function () { sendWhenReady(0); scanPerformance(); scanPageForSubUrls(true); }, 250);
     } else if (isYouTube()) {
       var vid = getVideoId();
       if (vid && vid !== ytSentFor) sendWhenReady(0);
     }
-    scanPerformance();
-    scanPageForSubUrls();
+    if (document.querySelector("video")) {
+      scanPerformance();
+      scanPageForSubUrls(false);
+    }
   }, 2000);
   sendWhenReady(0);
-  setTimeout(function () { scanPerformance(); scanPageForSubUrls(); }, 800);
-  setTimeout(function () { scanPerformance(); scanPageForSubUrls(); }, 3000);
+  setTimeout(function () { scanPerformance(); scanPageForSubUrls(true); }, 800);
+  setTimeout(function () { scanPerformance(); scanPageForSubUrls(false); }, 3000);
 })();
