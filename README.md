@@ -6,6 +6,21 @@ Everything runs locally in your browser, fully offline after the first load. No 
 
 **Why this exists:** good Japanese learning tools keep ending up behind weekly or monthly paywalls. This one is built in the open instead, with a little AI help, so anyone can use it, inspect it, and make it better.
 
+## New in 2.8.0
+
+The biggest upgrade yet:
+
+- **6 visual themes**: Classic Light, Midnight Obsidian, Cyberpunk Neon, Sakura Washi, Matcha Zen, and OLED Pitch Black, across the popup and every on-video surface.
+- **Smarter word cards**: compound verbs merge into one clickable word with conjugation tags, plus pitch accent contours and kanji radical/lookalike breakdowns.
+- **Active listening modes**: blur captions until hovered, or cloze mode that hides one unknown word per line. Furigana can show for all kanji, unknown words only, or on hover.
+- **Study the whole episode**: the Episode tab ranks every unknown word by frequency, and the i+1 filter shows only lines with exactly one unknown word.
+- **Real show audio in your Anki cards**: record the actual line audio, plus an optional screenshot, with custom field mapping. Shadow mode scores your pronunciation mora by mora.
+- **Timing tools**: nudge subtitles by 0.25s from the control bar, or auto-sync to the video's speech.
+- **No subtitles? No problem**: live transcription for raw videos, or search Jimaku.cc for anime subtitle files right from the Subs menu.
+- **Plus:** auto-pause per line, hover-to-pause, draggable captions, Anki known-word sync, and iframe player support.
+
+Full details in the changelog below.
+
 **No Japanese subtitles on the site? No problem.** Some services (Crunchyroll, for example) do not offer a Japanese subtitle track at all. Download a Japanese `.srt` for the episode (kitsunekko.net and jimaku.cc are the usual sources for anime) and load it with the **Load sub** button in the toolbar popup. The whole study layer works exactly the same.
 
 ## Screenshots
